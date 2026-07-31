@@ -1,124 +1,91 @@
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { createClient } = require('@libsql/client');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// SQLite veritabanı dosyası bağlantısı
-const dbPath = path.join(__dirname, 'etkinlikcalendar.db');
-const db = new sqlite3.Database(dbPath);
+// Turso Bulut Veritabanı Bağlantısı
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
-// Tabloları ve varsayılan verileri otomatik oluştur
-db.serialize(() => {
-    // 1. Takvim Etkinlikleri Tablosu
-    db.run(`
-        CREATE TABLE IF NOT EXISTS takvim_etkinlikleri (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tarih TEXT,
-            baslangic INTEGER,
-            bitis INTEGER,
-            etkinlik_id INTEGER,
-            person TEXT,
-            renk_id INTEGER
-        )
+// Tabloyu Oluşturma
+async function initDb() {
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS etkinlikler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        baslik TEXT,
+        aciklama TEXT,
+        tarih TEXT,
+        saat TEXT,
+        konum TEXT
+      )
     `);
+    console.log('✅ Turso bulut veritabanı tablosu hazır!');
+  } catch (err) {
+    console.error('Veritabanı hatası:', err);
+  }
+}
+initDb();
 
-    // 2. Etkinlik Türleri Tablosu
-    db.run(`
-        CREATE TABLE IF NOT EXISTS etkinlik (
-            etkinlik_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ad TEXT
-        )
-    `, () => {
-        // Tablo boşsa varsayılan etkinlik türlerini ekle
-        db.get("SELECT COUNT(*) as count FROM etkinlik", (err, row) => {
-            if (row && row.count === 0) {
-                db.run("INSERT INTO etkinlik (ad) VALUES ('Düğün'), ('Kına'), ('Nişan'), ('Sünnet'), ('Toplantı')");
-            }
-        });
-    });
-
-    // 3. Renkler Tablosu
-    db.run(`
-        CREATE TABLE IF NOT EXISTS renkler (
-            renk_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            renkAdi TEXT,
-            renkKodu TEXT,
-            etkinlik_id INTEGER
-        )
-    `, () => {
-        // Tablo boşsa varsayılan renkleri ekle
-        db.get("SELECT COUNT(*) as count FROM renkler", (err, row) => {
-            if (row && row.count === 0) {
-                db.run("INSERT INTO renkler (renkAdi, renkKodu, etkinlik_id) VALUES ('Kırmızı', '#ff4d4f', 1), ('Yeşil', '#52c41a', 2), ('Mavi', '#1890ff', 3), ('Sarı', '#fadb14', 4), ('Mor', '#722ed1', 5)");
-            }
-        });
-    });
+// Etkinlikleri Getir (GET)
+app.get('/api/etkinlikler', async (req, res) => {
+  try {
+    const result = await db.execute('SELECT * FROM etkinlikler');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// --- ROTALAR (API ENDPOINTS) ---
-
-// ETKİNLİK TÜRLERİNİ GETİR
-app.get('/api/etkinlikler', (req, res) => {
-    db.all('SELECT * FROM etkinlik', [], (err, rows) => {
-        if (err) return res.status(500).json({ mesaj: "Etkinlikler çekilemedi." });
-        res.json(rows);
+// Etkinlik Kaydet (POST)
+app.post('/api/takvim-etkinlik-kaydet', async (req, res) => {
+  const { baslik, aciklama, tarih, saat, konum } = req.body;
+  try {
+    await db.execute({
+      sql: 'INSERT INTO etkinlikler (baslik, aciklama, tarih, saat, konum) VALUES (?, ?, ?, ?, ?)',
+      args: [baslik || '', aciklama || '', tarih || '', saat || '', konum || '']
     });
+    res.json({ message: 'Etkinlik başarıyla kaydedildi' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// RENKLERİ GETİR
-app.get('/api/renkler', (req, res) => {
-    db.all('SELECT * FROM renkler', [], (err, rows) => {
-        if (err) return res.status(500).json({ mesaj: "Renkler çekilemedi." });
-        res.json(rows);
+// Etkinlik Güncelle (PUT)
+app.put('/api/takvim-etkinlik-guncelle/:id', async (req, res) => {
+  const { id } = req.params;
+  const { baslik, aciklama, tarih, saat, konum } = req.body;
+  try {
+    await db.execute({
+      sql: 'UPDATE etkinlikler SET baslik = ?, aciklama = ?, tarih = ?, saat = ?, konum = ? WHERE id = ?',
+      args: [baslik || '', aciklama || '', tarih || '', saat || '', konum || '', id]
     });
+    res.json({ message: 'Etkinlik güncellendi' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// TAKVİM ETKİNLİKLERİNİ GETİR
-app.get('/api/takvim-etkinlikleri', (req, res) => {
-    db.all('SELECT * FROM takvim_etkinlikleri', [], (err, rows) => {
-        if (err) return res.status(500).json({ mesaj: "Takvim etkinlikleri alınamadı." });
-        res.json(rows);
+// Etkinlik Sil (DELETE)
+app.delete('/api/takvim-etkinlik-sil/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute({
+      sql: 'DELETE FROM etkinlikler WHERE id = ?',
+      args: [id]
     });
+    res.json({ message: 'Etkinlik silindi' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// YENİ ETKİNLİK KAYDET
-app.post('/api/takvim-etkinlik-kaydet', (req, res) => {
-    const { tarih, baslangic, bitis, etkinlik_id, person, renk_id } = req.body;
-    const sql = `INSERT INTO takvim_etkinlikleri (tarih, baslangic, bitis, etkinlik_id, person, renk_id) VALUES (?, ?, ?, ?, ?, ?)`;
-    
-    db.run(sql, [tarih, baslangic, bitis, etkinlik_id, person || "", renk_id], function(err) {
-        if (err) return res.status(500).json({ basarili: false, mesaj: "Etkinlik kaydedilemedi." });
-        res.json({ basarili: true, id: this.lastID, mesaj: "Etkinlik başarıyla kaydedildi!" });
-    });
-});
-
-// ETKİNLİK GÜNCELLE
-app.put('/api/takvim-etkinlik-guncelle/:id', (req, res) => {
-    const id = req.params.id;
-    const { tarih, baslangic, bitis, etkinlik_id, person, renk_id } = req.body;
-    const sql = `UPDATE takvim_etkinlikleri SET tarih = ?, baslangic = ?, bitis = ?, etkinlik_id = ?, person = ?, renk_id = ? WHERE id = ?`;
-
-    db.run(sql, [tarih, baslangic, bitis, etkinlik_id, person || "", renk_id, id], function(err) {
-        if (err) return res.status(500).json({ basarili: false, mesaj: "Etkinlik güncellenemedi." });
-        res.json({ basarili: true, mesaj: "Etkinlik başarıyla güncellendi!" });
-    });
-});
-
-// ETKİNLİK SİL
-app.delete('/api/takvim-etkinlik-sil/:id', (req, res) => {
-    const id = req.params.id;
-    db.run(`DELETE FROM takvim_etkinlikleri WHERE id = ?`, [id], function(err) {
-        if (err) return res.status(500).json({ basarili: false, mesaj: "Etkinlik silinemedi." });
-        res.json({ basarili: true, mesaj: "Etkinlik silindi." });
-    });
-});
-
-// Sunucuyu başlat (Render ortam değişkenindeki PORT'u otomatik kullanır)
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`🚀 Sunucu aktif! Port: ${PORT}`);
+  console.log(`🚀 Sunucu aktif! Port: ${PORT}`);
 });
