@@ -20,61 +20,56 @@ const db = createClient({
 // Veritabanı Tablolarını ve Örnek Verileri Otomatik Oluşturma
 async function veritabaniKurulumu() {
   try {
-    // 1. Etkinlikler Tablosu
+    // 1. Tanımlı Etkinlik Türleri Tablosu (Örn: Düğün, Nişan vb.)
     await db.execute(`
-      CREATE TABLE IF NOT EXISTS etkinlikler (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        baslik TEXT,
-        aciklama TEXT,
-        tarih TEXT,
-        saat TEXT,
-        konum TEXT,
-        tur TEXT
+      CREATE TABLE IF NOT EXISTS etkinlik_turleri (
+        etkinlik_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad TEXT
       )
     `);
-
-    try {
-      await db.execute(`ALTER TABLE etkinlikler ADD COLUMN tur TEXT`);
-    } catch (e) {}
 
     // 2. Renkler Tablosu
     await db.execute(`
       CREATE TABLE IF NOT EXISTS renkler (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ad TEXT,
-        kod TEXT,
-        kategori TEXT
+        renk_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        renkAdi TEXT,
+        renkKodu TEXT,
+        etkinlik_id INTEGER
       )
     `);
 
-    try {
-      await db.execute(`ALTER TABLE renkler ADD COLUMN kategori TEXT`);
-    } catch (e) {}
+    // 3. Takvime Eklenen Gerçek Etkinlikler Tablosu
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS takvim_etkinlikleri (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarih TEXT,
+        baslangic INTEGER,
+        bitis INTEGER,
+        etkinlik_id INTEGER,
+        person TEXT,
+        renk_id INTEGER
+      )
+    `);
 
-    // 3. Etkinlikler Tablosu Boşsa Örnek Veri Ekle
-    const etkinlikKontrol = await db.execute("SELECT COUNT(*) as sayi FROM etkinlikler");
-    if (etkinlikKontrol.rows[0].sayi === 0) {
+    // Tablolar boşsa örnek verileri ekleyelim
+    const turKontrol = await db.execute("SELECT COUNT(*) as sayi FROM etkinlik_turleri");
+    if (turKontrol.rows[0].sayi === 0) {
       await db.execute(`
-        INSERT INTO etkinlikler (baslik, aciklama, tarih, saat, konum, tur) 
-        VALUES 
-        ('Ahmet & Zeynep Düğün', 'Kır düğünü ve nikah merasimi', '2026-06-15', '19:00', 'Ankara Kır Bahçesi', 'Düğün'),
-        ('Merve & Can Nişan', 'Aile arası nişan töreni', '2026-06-22', '14:00', 'Çankaya Salonu', 'Nişan')
+        INSERT INTO etkinlik_turleri (etkinlik_id, ad) VALUES 
+        (1, 'Düğün'),
+        (2, 'Nişan')
       `);
-      console.log("Örnek düğün ve nişan etkinlikleri eklendi.");
+      console.log("Örnek etkinlik türleri eklendi.");
     }
 
-    // 4. Renkler Tablosu Boşsa Örnek Veri Ekle
     const renkKontrol = await db.execute("SELECT COUNT(*) as sayi FROM renkler");
     if (renkKontrol.rows[0].sayi === 0) {
       await db.execute(`
-        INSERT INTO renkler (ad, kod, kategori) 
-        VALUES 
-        ('Koyu Lacivert', '#1b263b', 'Genel Tasarım'),
-        ('Krem', '#fdfbf7', 'Arka Plan'),
-        ('Yeşil', '#27ae60', 'Nişan Etkinlikleri'),
-        ('Kırmızı', '#c0392b', 'Düğün Etkinlikleri')
+        INSERT INTO renkler (renk_id, renkAdi, renkKodu, etkinlik_id) VALUES 
+        (1, 'Kırmızı', '#c0392b', 1),
+        (2, 'Yeşil', '#27ae60', 2)
       `);
-      console.log("Örnek renk paleti eklendi.");
+      console.log("Örnek renkler eklendi.");
     }
 
     console.log("Veritabanı kurulumu başarıyla tamamlandı.");
@@ -88,29 +83,74 @@ veritabaniKurulumu();
 
 // --- API ROTALARI ---
 
-app.get('/api/renkler', async (req, res) => {
-    try {
-        // Sütun isimlerini frontend'in beklediği ihtimallere göre uyarlıyoruz
-        const sonuc = await db.execute("SELECT ad AS name, kod AS color, kategori AS type FROM renkler");
-        res.json(sonuc.rows);
-    } catch (hata) {
-        res.status(500).json({ hata: hata.message });
-    }
-});
-
+// Etkinlik türlerini getir
 app.get('/api/etkinlikler', async (req, res) => {
     try {
-        const sonuc = await db.execute("SELECT * FROM etkinlikler");
+        const sonuc = await db.execute("SELECT * FROM etkinlik_turleri");
         res.json(sonuc.rows);
     } catch (hata) {
         res.status(500).json({ hata: hata.message });
     }
 });
 
+// Renkleri getir
+app.get('/api/renkler', async (req, res) => {
+    try {
+        const sonuc = await db.execute("SELECT * FROM renkler");
+        res.json(sonuc.rows);
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+// Takvime kaydedilmiş tüm etkinlikleri getir
 app.get('/api/takvim-etkinlikleri', async (req, res) => {
     try {
-        const sonuc = await db.execute("SELECT * FROM etkinlikler");
+        const sonuc = await db.execute("SELECT * FROM takvim_etkinlikleri");
         res.json(sonuc.rows);
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+// Yeni takvim etkinliği kaydet
+app.post('/api/takvim-etkinlik-kaydet', async (req, res) => {
+    try {
+        const { tarih, baslangic, bitis, etkinlik_id, person, renk_id } = req.body;
+        await db.execute({
+            sql: `INSERT INTO takvim_etkinlikleri (tarih, baslangic, bitis, etkinlik_id, person, renk_id) VALUES (?, ?, ?, ?, ?, ?)`,
+            args: [tarih, baslangic, bitis, etkinlik_id, person, renk_id]
+        });
+        res.status(200).json({ mesaj: "Etkinlik başarıyla kaydedildi." });
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+// Var olan takvim etkinliğini güncelle
+app.put('/api/takvim-etkinlik-guncelle/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { tarih, baslangic, bitis, etkinlik_id, person, renk_id } = req.body;
+        await db.execute({
+            sql: `UPDATE takvim_etkinlikleri SET tarih = ?, baslangic = ?, bitis = ?, etkinlik_id = ?, person = ?, renk_id = ? WHERE id = ?`,
+            args: [tarih, baslangic, bitis, etkinlik_id, person, renk_id, id]
+        });
+        res.status(200).json({ mesaj: "Etkinlik başarıyla güncellendi." });
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+// Takvim etkinliğini sil
+app.delete('/api/takvim-etkinlik-sil/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.execute({
+            sql: `DELETE FROM takvim_etkinlikleri WHERE id = ?`,
+            args: [id]
+        });
+        res.status(200).json({ mesaj: "Etkinlik başarıyla silindi." });
     } catch (hata) {
         res.status(500).json({ hata: hata.message });
     }
