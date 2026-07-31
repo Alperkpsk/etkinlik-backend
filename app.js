@@ -17,15 +17,9 @@ const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN || '',
 });
 
-// Veritabanı Tablolarını ve Örnek Verileri Otomatik Oluşturma / Güncelleme
+// Veritabanı Tablolarını Otomatik Oluşturma (Verileri silmeden güvenli kurulum)
 async function veritabaniKurulumu() {
   try {
-    // Eski uyumsuz tabloları temizleyerek çakışmaları önlüyoruz
-    await db.execute(`DROP TABLE IF EXISTS etkinlikler`);
-    await db.execute(`DROP TABLE IF EXISTS etkinlik_turleri`);
-    await db.execute(`DROP TABLE IF EXISTS renkler`);
-    await db.execute(`DROP TABLE IF EXISTS takvim_etkinlikleri`);
-
     // 1. Tanımlı Etkinlik Türleri Tablosu
     await db.execute(`
       CREATE TABLE IF NOT EXISTS etkinlik_turleri (
@@ -44,7 +38,7 @@ async function veritabaniKurulumu() {
       )
     `);
 
-    // 3. Takvime Eklenen Gerçek Etkinlikler Tablosu
+    // 3. Takvime Eklenen Gerçek Etkinlikler Tablosu (Verileriniz burada saklanır)
     await db.execute(`
       CREATE TABLE IF NOT EXISTS takvim_etkinlikleri (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,27 +51,35 @@ async function veritabaniKurulumu() {
       )
     `);
 
-    // Örnek Etkinlik Türlerini Ekle (Düğün, Nişan, Yemek, Söz, Sünnet)
-    await db.execute(`
-      INSERT INTO etkinlik_turleri (etkinlik_id, ad) VALUES 
-      (1, 'Düğün'),
-      (2, 'Nişan'),
-      (3, 'Yemek'),
-      (4, 'Söz'),
-      (5, 'Sünnet')
-    `);
+    // Etkinlik türleri tablosu boşsa örnek türleri ekle (Düğün, Nişan, Yemek, Söz, Sünnet)
+    const turKontrol = await db.execute("SELECT COUNT(*) as sayi FROM etkinlik_turleri");
+    if (turKontrol.rows[0].sayi === 0) {
+      await db.execute(`
+        INSERT INTO etkinlik_turleri (etkinlik_id, ad) VALUES 
+        (1, 'Düğün'),
+        (2, 'Nişan'),
+        (3, 'Yemek'),
+        (4, 'Söz'),
+        (5, 'Sünnet')
+      `);
+      console.log("Örnek etkinlik türleri eklendi.");
+    }
 
-    // Örnek Renkleri ve Eşleşen Etkinlik ID'lerini Ekle
-    await db.execute(`
-      INSERT INTO renkler (renk_id, renkAdi, renkKodu, etkinlik_id) VALUES 
-      (1, 'Kırmızı', '#c0392b', 1),
-      (2, 'Yeşil', '#27ae60', 2),
-      (3, 'Turuncu', '#e67e22', 3),
-      (4, 'Mor', '#8e44ad', 4),
-      (5, 'Mavi', '#2980b9', 5)
-    `);
+    // Renkler tablosu boşsa renkleri ekle
+    const renkKontrol = await db.execute("SELECT COUNT(*) as sayi FROM renkler");
+    if (renkKontrol.rows[0].sayi === 0) {
+      await db.execute(`
+        INSERT INTO renkler (renk_id, renkAdi, renkKodu, etkinlik_id) VALUES 
+        (1, 'Kırmızı', '#c0392b', 1),
+        (2, 'Yeşil', '#27ae60', 2),
+        (3, 'Turuncu', '#e67e22', 3),
+        (4, 'Mor', '#8e44ad', 4),
+        (5, 'Mavi', '#2980b9', 5)
+      `);
+      console.log("Örnek renkler eklendi.");
+    }
 
-    console.log("Veritabanı kurulumu başarıyla tamamlandı ve yeni etkinlik türleri eklendi.");
+    console.log("Veritabanı kurulumu başarıyla tamamlandı.");
   } catch (hata) {
     console.error("Veritabanı kurulum hatası:", hata);
   }
