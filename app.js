@@ -1,18 +1,3 @@
-import express from 'express';
-import cors from 'cors';
-import { createClient } from '@libsql/client';
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// Turso Veritabanı Bağlantısı
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
-
-// Veritabanı Tablolarını ve Örnek Verileri Otomatik Oluşturma
 async function veritabaniKurulumu() {
   try {
     // 1. Etkinlikler Tablosu
@@ -28,7 +13,14 @@ async function veritabaniKurulumu() {
       )
     `);
 
-    // 2. Renkler Tablosu (Krem, Koyu Lacivert, Yeşil, Kırmızı Paleti)
+    // Tablo daha önceden var ve 'tur' sütunu eksikse ekle
+    try {
+      await db.execute(`ALTER TABLE etkinlikler ADD COLUMN tur TEXT`);
+    } catch (e) {
+      // Sütun zaten varsa hata verir, burası hatayı yakalayıp sessizce geçer
+    }
+
+    // 2. Renkler Tablosu
     await db.execute(`
       CREATE TABLE IF NOT EXISTS renkler (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +29,11 @@ async function veritabaniKurulumu() {
         kategori TEXT
       )
     `);
+
+    // Tablo daha önceden var ve 'kategori' sütunu eksikse ekle
+    try {
+      await db.execute(`ALTER TABLE renkler ADD COLUMN kategori TEXT`);
+    } catch (e) {}
 
     // 3. Etkinlikler Tablosu Boşsa Örnek Veri Ekle
     const etkinlikKontrol = await db.execute("SELECT COUNT(*) as sayi FROM etkinlikler");
@@ -64,48 +61,8 @@ async function veritabaniKurulumu() {
       console.log("Örnek renk paleti eklendi.");
     }
 
-    console.log("Veritabanı kurulumu ve veri aktarımı başarıyla tamamlandı.");
+    console.log("Veritabanı kurulumu başarıyla tamamlandı.");
   } catch (hata) {
     console.error("Veritabanı kurulum hatası:", hata);
   }
 }
-
-// Kurulumu başlat
-veritabaniKurulumu();
-
-// --- API ROTALARI (Endpoints) ---
-
-// Renkleri Getir
-app.get('/api/renkler', async (req, res) => {
-    try {
-        const sonuc = await db.execute("SELECT * FROM renkler");
-        res.json(sonuc.rows);
-    } catch (hata) {
-        res.status(500).json({ hata: hata.message });
-    }
-});
-
-// Etkinlikleri Getir
-app.get('/api/etkinlikler', async (req, res) => {
-    try {
-        const sonuc = await db.execute("SELECT * FROM etkinlikler");
-        res.json(sonuc.rows);
-    } catch (hata) {
-        res.status(500).json({ hata: hata.message });
-    }
-});
-
-// Takvim Etkinlikleri İçin Alternatif Rota (Frontend uyumluluğu için)
-app.get('/api/takvim-etkinlikleri', async (req, res) => {
-    try {
-        const sonuc = await db.execute("SELECT * FROM etkinlikler");
-        res.json(sonuc.rows);
-    } catch (hata) {
-        res.status(500).json({ hata: hata.message });
-    }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor.`);
-});
