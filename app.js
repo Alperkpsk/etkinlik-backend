@@ -90,7 +90,8 @@ veritabaniKurulumu();
 
 app.get('/api/renkler', async (req, res) => {
     try {
-        const sonuc = await db.execute("SELECT * FROM renkler");
+        // Sütun isimlerini frontend'in beklediği ihtimallere göre uyarlıyoruz
+        const sonuc = await db.execute("SELECT ad AS name, kod AS color, kategori AS type FROM renkler");
         res.json(sonuc.rows);
     } catch (hata) {
         res.status(500).json({ hata: hata.message });
