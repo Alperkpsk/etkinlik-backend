@@ -1,7 +1,7 @@
 {
-  "name": "etkinlikcalendar",
+  "name": "etkinlik-backend",
   "version": "1.0.0",
-  "description": "Çaydeğirmeni Belediyesi Takvim Backend",
+  "type": "module",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
@@ -9,6 +9,6 @@
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "express": "^4.19.2"
   }
 }
