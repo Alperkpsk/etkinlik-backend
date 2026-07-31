@@ -26,7 +26,7 @@ async function veritabaniKurulumu() {
     await db.execute(`DROP TABLE IF EXISTS renkler`);
     await db.execute(`DROP TABLE IF EXISTS takvim_etkinlikleri`);
 
-    // 1. Tanımlı Etkinlik Türleri Tablosu (Örn: Düğün, Nişan vb.)
+    // 1. Tanımlı Etkinlik Türleri Tablosu
     await db.execute(`
       CREATE TABLE IF NOT EXISTS etkinlik_turleri (
         etkinlik_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,21 +57,27 @@ async function veritabaniKurulumu() {
       )
     `);
 
-    // Örnek Etkinlik Türlerini Ekle
+    // Örnek Etkinlik Türlerini Ekle (Düğün, Nişan, Yemek, Söz, Sünnet)
     await db.execute(`
       INSERT INTO etkinlik_turleri (etkinlik_id, ad) VALUES 
       (1, 'Düğün'),
-      (2, 'Nişan')
+      (2, 'Nişan'),
+      (3, 'Yemek'),
+      (4, 'Söz'),
+      (5, 'Sünnet')
     `);
 
-    // Örnek Renkleri Ekle
+    // Örnek Renkleri ve Eşleşen Etkinlik ID'lerini Ekle
     await db.execute(`
       INSERT INTO renkler (renk_id, renkAdi, renkKodu, etkinlik_id) VALUES 
       (1, 'Kırmızı', '#c0392b', 1),
-      (2, 'Yeşil', '#27ae60', 2)
+      (2, 'Yeşil', '#27ae60', 2),
+      (3, 'Turuncu', '#e67e22', 3),
+      (4, 'Mor', '#8e44ad', 4),
+      (5, 'Mavi', '#2980b9', 5)
     `);
 
-    console.log("Veritabanı kurulumu başarıyla tamamlandı ve tablolar güncellendi.");
+    console.log("Veritabanı kurulumu başarıyla tamamlandı ve yeni etkinlik türleri eklendi.");
   } catch (hata) {
     console.error("Veritabanı kurulum hatası:", hata);
   }
