@@ -1,3 +1,23 @@
+import express from 'express';
+import cors from 'cors';
+import { createClient } from '@libsql/client';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Ortam değişkenleri kontrolü
+if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
+  console.error("HATA: TURSO_DATABASE_URL veya TURSO_AUTH_TOKEN çevre değişkenleri eksik!");
+}
+
+// Turso Veritabanı Bağlantısı
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL || '',
+  authToken: process.env.TURSO_AUTH_TOKEN || '',
+});
+
+// Veritabanı Tablolarını ve Örnek Verileri Otomatik Oluşturma
 async function veritabaniKurulumu() {
   try {
     // 1. Etkinlikler Tablosu
@@ -13,12 +33,9 @@ async function veritabaniKurulumu() {
       )
     `);
 
-    // Tablo daha önceden var ve 'tur' sütunu eksikse ekle
     try {
       await db.execute(`ALTER TABLE etkinlikler ADD COLUMN tur TEXT`);
-    } catch (e) {
-      // Sütun zaten varsa hata verir, burası hatayı yakalayıp sessizce geçer
-    }
+    } catch (e) {}
 
     // 2. Renkler Tablosu
     await db.execute(`
@@ -30,7 +47,6 @@ async function veritabaniKurulumu() {
       )
     `);
 
-    // Tablo daha önceden var ve 'kategori' sütunu eksikse ekle
     try {
       await db.execute(`ALTER TABLE renkler ADD COLUMN kategori TEXT`);
     } catch (e) {}
@@ -66,3 +82,40 @@ async function veritabaniKurulumu() {
     console.error("Veritabanı kurulum hatası:", hata);
   }
 }
+
+// Kurulumu başlat
+veritabaniKurulumu();
+
+// --- API ROTALARI ---
+
+app.get('/api/renkler', async (req, res) => {
+    try {
+        const sonuc = await db.execute("SELECT * FROM renkler");
+        res.json(sonuc.rows);
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+app.get('/api/etkinlikler', async (req, res) => {
+    try {
+        const sonuc = await db.execute("SELECT * FROM etkinlikler");
+        res.json(sonuc.rows);
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+app.get('/api/takvim-etkinlikleri', async (req, res) => {
+    try {
+        const sonuc = await db.execute("SELECT * FROM etkinlikler");
+        res.json(sonuc.rows);
+    } catch (hata) {
+        res.status(500).json({ hata: hata.message });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor.`);
+});
